@@ -1,6 +1,7 @@
 #Crush
 
 * Author: [Mark Croxton](http://hallmark-design.co.uk/)
+* Author of CSS Crush: [Pete Boere](https://github.com/peteboere)
 
 ## Version 1.0.0
 
