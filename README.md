@@ -22,22 +22,22 @@ This plugin is a wrapper for CSS Crush that allows you to use it in ExpressionEn
 
 ##Tags
 
-###`{exp:crush:tag}`
+###{exp:crush:tag}
 Process host CSS file and return a new compiled file
 
-###`{exp:crush:file}`
+###{exp:crush:file}
 Process host CSS file and return an HTML link tag with populated href
 
-###`{exp:crush:inline}`
+###{exp:crush:inline}
 Process host CSS file and return CSS as text wrapped in html style tags
 
-###`{exp:crush:string}`
+###{exp:crush:string}
 Compile a raw string of CSS string and return it
 
-###`{exp:crush:global_vars}`
+###{exp:crush:global_vars}
 Add variables globally
 
-###`{exp:crush:clear_cache}`
+###{exp:crush:clear_cache}
 Clear config file and compiled files for the specified directory
 
 ###{exp:crush:stat}
