@@ -36,10 +36,10 @@ This plugin supports all the CSS Crush methods as tags, with options passed as p
 ##Tags
 
 ###{exp:crush:tag}
-Process host CSS file and return a new compiled file
+Process host CSS file and return an HTML link tag with populated href
 
 ###{exp:crush:file}
-Process host CSS file and return an HTML link tag with populated href
+Process host CSS file and return a new compiled file
 
 ###{exp:crush:inline}
 Process host CSS file and return CSS as text wrapped in html style tags
