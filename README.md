@@ -21,6 +21,18 @@ This plugin is a wrapper for CSS Crush that allows you to use it in ExpressionEn
 
 (if you're using a custom config bootstrap file, add the config items there instead)
 
+
+## Usage:
+
+This plugin supports all the CSS Crush methods as tags, with options passed as parameters. Example:
+
+	{exp:crush:tag 
+		filename="/_assets/css/style.css"
+		minify="y"
+		vars="my_var1=#333|my_var2=20px"
+		attributes="media=print|title=monkey"
+	} 
+
 ##Tags
 
 ###{exp:crush:tag}
