@@ -4,61 +4,102 @@
  * Selector objects.
  *
  */
-class CssCrush_Selector
+namespace CssCrush;
+
+class Selector
 {
     public $value;
     public $readableValue;
     public $allowPrefix = true;
 
-    static function makeReadableSelector ( $selector_string )
+    public function __construct($rawSelector)
     {
-        // Quick test for paren tokens.
-        if ( strpos( $selector_string, '?p' ) !== false ) {
-            $selector_string = CssCrush::$process->restoreTokens( $selector_string, 'p' );
-        }
-
-        // Create space around combinators, then normalize whitespace.
-        $selector_string = preg_replace( '#([>+]|~(?!=))#', ' $1 ', $selector_string );
-        $selector_string = CssCrush_Util::normalizeWhiteSpace( $selector_string );
-
-        // Quick test for string tokens.
-        if ( strpos( $selector_string, '?s' ) !== false ) {
-            $selector_string = CssCrush::$process->restoreTokens( $selector_string, 's' );
-        }
-
-        // Quick test for double-colons for backwards compat.
-        if ( strpos( $selector_string, '::' ) !== false ) {
-            $selector_string = preg_replace( '!::(after|before|first-(?:letter|line))!iS', ':$1', $selector_string );
-        }
-
-        return $selector_string;
-    }
-
-    public function __construct ( $raw_selector, $associated_rule = null )
-    {
-        if ( strpos( $raw_selector, '^' ) === 0 ) {
-
-            $raw_selector = ltrim( $raw_selector, "^ \n\r\t" );
+        // Look for rooting prefix.
+        if (strpos($rawSelector, '^') === 0) {
+            $rawSelector = ltrim($rawSelector, "^ \n\r\t");
             $this->allowPrefix = false;
         }
 
-        $this->readableValue = self::makeReadableSelector( $raw_selector );
-        $this->value = $raw_selector;
+        $this->readableValue = Selector::makeReadable($rawSelector);
+
+        $this->value = Selector::expandAliases($rawSelector);
     }
 
-    public function __toString ()
+    public function __toString()
     {
-        return $this->readableValue;
+        if (Crush::$process->minifyOutput) {
+            // Trim whitespace around selector combinators.
+            $this->value = preg_replace('~ ?([>\~+]) ?~S', '$1', $this->value);
+        }
+        else {
+            $this->value = Selector::normalizeWhiteSpace($this->value);
+        }
+        return $this->value;
     }
 
-    public function appendPseudo ( $pseudo )
+    public function appendPseudo($pseudo)
     {
-        // Check to avoid doubling-up
-        if ( ! CssCrush_Stream::endsWith( $this->readableValue, $pseudo ) ) {
+        // Check to avoid doubling-up.
+        if (! StringObject::endsWith($this->readableValue, $pseudo)) {
 
             $this->readableValue .= $pseudo;
             $this->value .= $pseudo;
         }
         return $this->readableValue;
+    }
+
+    public static function normalizeWhiteSpace($str)
+    {
+        // Create space around combinators, then normalize whitespace.
+        return Util::normalizeWhiteSpace(preg_replace('~([>+]|\~(?!=))~S', ' $1 ', $str));
+    }
+
+    public static function makeReadable($str)
+    {
+        $str = Selector::normalizeWhiteSpace($str);
+
+        // Quick test for string tokens.
+        if (strpos($str, '?s') !== false) {
+            $str = Crush::$process->tokens->restore($str, 's');
+        }
+
+        return $str;
+    }
+
+    public static function expandAliases($str)
+    {
+        $process = Crush::$process;
+
+        if (! $process->selectorAliases || ! preg_match($process->selectorAliasesPatt, $str)) {
+            return $str;
+        }
+
+        while (preg_match_all($process->selectorAliasesPatt, $str, $m, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
+
+            $alias_call = end($m);
+            $alias_name = strtolower($alias_call[1][0]);
+
+            $start = $alias_call[0][1];
+            $length = strlen($alias_call[0][0]);
+            $args = array();
+
+            // It's a function alias if a start paren is matched.
+            if (isset($alias_call[2])) {
+
+                // Parse argument list.
+                if (preg_match(Regex::$patt->parens, $str, $parens, PREG_OFFSET_CAPTURE, $start)) {
+                    $args = Functions::parseArgs($parens[2][0]);
+
+                    // Amend offsets.
+                    $paren_start = $parens[0][1];
+                    $paren_len = strlen($parens[0][0]);
+                    $length = ($paren_start + $paren_len) - $start;
+                }
+            }
+
+            $str = substr_replace($str, $process->selectorAliases[$alias_name]($args), $start, $length);
+        }
+
+        return $str;
     }
 }

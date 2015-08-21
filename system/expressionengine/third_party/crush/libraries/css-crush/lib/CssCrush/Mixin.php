@@ -4,172 +4,103 @@
  *  Mixin objects.
  *
  */
-class CssCrush_Mixin
+namespace CssCrush;
+
+class Mixin
 {
-    public $declarationsTemplate = array();
+    public $template;
 
-    public $arguments;
-
-    public $data = array();
-
-    public function __construct ( $block )
+    public function __construct($block)
     {
-        // Strip comment markers
-        $block = CssCrush_Util::stripCommentTokens( $block );
-
-        // Prepare the arguments object
-        $this->arguments = new CssCrush_ArgList( $block );
-
-        // Re-assign with the parsed arguments string
-        $block = $this->arguments->string;
-
-        // Split the block around semi-colons.
-        $declarations = preg_split( '!\s*;\s*!', trim( $block ), null, PREG_SPLIT_NO_EMPTY );
-
-        foreach ( $declarations as $raw_declaration ) {
-
-            $colon = strpos( $raw_declaration, ':' );
-            if ( $colon === -1 ) {
-                continue;
-            }
-
-            // Store template declarations as arrays as they are copied by value not reference
-            $declaration = array();
-
-            $declaration['property'] = trim( substr( $raw_declaration, 0, $colon ) );
-            $declaration['value'] = trim( substr( $raw_declaration, $colon + 1 ) );
-
-            if ( $declaration['property'] === 'mixin' ) {
-
-                // Mixin can contain other mixins if they are available
-                if ( $mixin_declarations = CssCrush_Mixin::parseValue( $declaration['value'] ) ) {
-
-                    // Add mixin result to the stack
-                    $this->declarationsTemplate = array_merge( $this->declarationsTemplate, $mixin_declarations );
-                }
-            }
-            elseif ( ! empty( $declaration['value'] ) ) {
-                $this->declarationsTemplate[] = $declaration;
-            }
-        }
-
-        // Create data table for the mixin.
-        // Values that use arg() are excluded
-        foreach ( $this->declarationsTemplate as &$declaration ) {
-            if ( ! preg_match( CssCrush_Regex::$patt->aToken, $declaration['value'] ) ) {
-                $this->data[ $declaration['property'] ] = $declaration['value'];
-            }
-        }
-        return '';
+        $this->template = new Template($block);
     }
 
-    public function call ( array $args )
+    public static function call($message, $context = null)
     {
-        // Copy the template
-        $declarations = $this->declarationsTemplate;
+        $process = Crush::$process;
+        $mixable = null;
+        $message = trim($message);
 
-        if ( count( $this->arguments ) ) {
+        // Test for mixin or abstract rule. e.g:
+        //   named-mixin( 50px, rgba(0,0,0,0), left 100% )
+        //   abstract-rule
+        if (preg_match(Regex::make('~^(?<name>{{ident}}) {{parens}}?~xS'), $message, $message_match)) {
 
-            list( $find, $replace ) = $this->arguments->getSubstitutions( $args );
+            $name = $message_match['name'];
 
-            // Place the arguments
-            foreach ( $declarations as &$declaration ) {
-                $declaration['value'] = str_replace( $find, $replace, $declaration['value'] );
+            if (isset($process->mixins[$name])) {
+
+                $mixable = $process->mixins[$name];
             }
-        }
+            elseif (isset($process->references[$name])) {
 
-        // Return mixin declarations
-        return $declarations;
-    }
-
-    static public function parseSingleValue ( $message )
-    {
-        $message = ltrim( $message );
-        $mixin = null;
-        $non_mixin = null;
-
-        // e.g.
-        //   - mymixin( 50px, rgba(0,0,0,0), left 100% )
-        //   - abstract-rule
-        //   - #selector
-
-        // Test for leading name
-        if ( preg_match( '!^[\w-]+!', $message, $name_match ) ) {
-
-            $name = $name_match[0];
-
-            if ( isset( CssCrush::$process->mixins[ $name ] ) ) {
-
-                // Mixin match
-                $mixin = CssCrush::$process->mixins[ $name ];
-            }
-            elseif ( isset( CssCrush::$process->abstracts[ $name ] ) ) {
-
-                // Abstract rule match
-                $non_mixin = CssCrush::$process->abstracts[ $name ];
+                $mixable = $process->references[$name];
             }
         }
 
         // If no mixin or abstract rule matched, look for matching selector
-        if ( ! $mixin && ! $non_mixin ) {
+        if (! $mixable) {
 
-            $selector_test = CssCrush_Selector::makeReadableSelector( $message );
+            $selector_test = Selector::makeReadable($message);
 
-            if ( isset( CssCrush::$process->selectorRelationships[ $selector_test ] ) ) {
-                $non_mixin = CssCrush::$process->selectorRelationships[ $selector_test ];
+            if (isset($process->references[$selector_test])) {
+                $mixable = $process->references[$selector_test];
             }
         }
 
-        // If no mixin matched, but matched alternative, use alternative
-        if ( ! $mixin ) {
+        // Avoid infinite recursion.
+        if (! $mixable || $mixable === $context) {
 
-            if ( $non_mixin ) {
-
-                // Return expected format
-                $result = array();
-                foreach ( $non_mixin as $declaration ) {
-                    $result[] = array(
-                        'property' => $declaration->property,
-                        'value'    => $declaration->value,
-                    );
-                }
-                return $result;
-            }
-            else {
-
-                // Nothing matches
-                return false;
-            }
+            return false;
         }
+        elseif ($mixable instanceof Mixin) {
 
-        // We have a valid mixin.
-        // Discard the name part and any wrapping parens and whitespace
-        $message = substr( $message, strlen( $name ) );
-        $message = preg_replace( '!^\s*\(?\s*|\s*\)?\s*$!', '', $message );
+            $args = array();
+            $raw_args = isset($message_match['parens_content']) ? trim($message_match['parens_content']) : null;
+            if ($raw_args) {
+                $args = Util::splitDelimList($raw_args);
+            }
 
-        // e.g. "value, rgba(0,0,0,0), left 100%"
-
-        // Determine what raw arguments there are to pass to the mixin
-        $args = array();
-        if ( $message !== '' ) {
-            $args = CssCrush_Util::splitDelimList( $message );
+            return DeclarationList::parse($mixable->template->__invoke($args), array(
+                'flatten' => true,
+                'context' => $mixable,
+            ));
         }
+        elseif ($mixable instanceof Rule) {
 
-        return $mixin->call( $args );
+            return $mixable->declarations->store;
+        }
     }
 
-    static public function parseValue ( $message )
+    public static function merge(array $input, $message_list, $options = array())
     {
-        // Call the mixin and return the list of declarations
-        $declarations = array();
+        $context = isset($options['context']) ? $options['context'] : null;
 
-        foreach ( CssCrush_Util::splitDelimList( $message ) as $item ) {
-
-            if ( $result = self::parseSingleValue( $item ) ) {
-
-                $declarations = array_merge( $declarations, $result );
+        $mixables = array();
+        foreach (Util::splitDelimList($message_list) as $message) {
+            if ($result = self::call($message, $context)) {
+                $mixables = array_merge($mixables, $result);
             }
         }
-        return $declarations;
+
+        while ($mixable = array_shift($mixables)) {
+            if ($mixable instanceof Declaration) {
+                $input[] = $mixable;
+            }
+            else {
+                list($property, $value) = $mixable;
+                if ($property === 'mixin') {
+                    $input = Mixin::merge($input, $value, $options);
+                }
+                elseif (! empty($options['keyed'])) {
+                    $input[$property] = $value;
+                }
+                else {
+                    $input[] = array($property, $value);
+                }
+            }
+        }
+
+        return $input;
     }
 }

@@ -1,36 +1,46 @@
 <?php
 /**
  *
- *  Fragment objects.
+ *  Fragments.
  *
  */
-class CssCrush_Fragment
+namespace CssCrush;
+
+class Fragment extends Template
 {
-    public $template = array();
+    public $name;
 
-    public $arguments;
-
-    public function __construct ( $block )
+    public function __construct($str, $options = array())
     {
-        // Prepare the arguments object
-        $this->arguments = new CssCrush_ArgList( $block );
-
-        // Re-assign with the parsed arguments string
-        $this->template = $this->arguments->string;
+        parent::__construct($str, $options);
+        $this->name = $options['name'];
     }
 
-    public function call ( array $args )
+    public function __invoke(array $args = null, $str = null)
     {
-        // Copy the template
-        $template = $this->template;
+        $str = parent::__invoke($args);
 
-        if ( count( $this->arguments ) ) {
+        // Flatten all fragment calls within the template string.
+        while (preg_match(Regex::$patt->fragmentInvoke, $str, $m, PREG_OFFSET_CAPTURE)) {
 
-            list( $find, $replace ) = $this->arguments->getSubstitutions( $args );
-            $template = str_replace( $find, $replace, $template );
+            $name = strtolower($m['name'][0]);
+            $fragment = isset(Crush::$process->fragments[$name]) ? Crush::$process->fragments[$name] : null;
+
+            $replacement = '';
+            $start = $m[0][1];
+            $length = strlen($m[0][0]);
+
+            // Skip over same named fragments to avoid infinite recursion.
+            if ($fragment && $name !== $this->name) {
+                $args = array();
+                if (isset($m['parens'][1])) {
+                    $args = Functions::parseArgs($m['parens_content'][0]);
+                }
+                $replacement = $fragment($args);
+            }
+            $str = substr_replace($str, $replacement, $start, $length);
         }
 
-        // Return fragment css
-        return $template;
+        return $str;
     }
 }

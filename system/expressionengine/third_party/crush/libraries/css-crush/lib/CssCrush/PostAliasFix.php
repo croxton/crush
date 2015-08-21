@@ -4,50 +4,45 @@
  * Fixes for aliasing to legacy syntaxes.
  *
  */
-class CssCrush_PostAliasFix
+namespace CssCrush;
+
+class PostAliasFix
 {
-    // Currently only post fixing aliased functions.
-    static public $functions = array();
+    public static $functions = array(
+        '.gradients' => 'CssCrush\postalias_fix_gradients',
+    );
 
-    static public function init ()
+    public static function add($alias_type, $key, $callback)
     {
-        // Register fix callbacks.
-        CssCrush_PostAliasFix::add( 'function', 'linear-gradient',
-            'csscrush__post_alias_fix_lineargradients' );
-        CssCrush_PostAliasFix::add( 'function', 'linear-repeating-gradient',
-            'csscrush__post_alias_fix_lineargradients' );
-        CssCrush_PostAliasFix::add( 'function', 'radial-gradient',
-            'csscrush__post_alias_fix_radialgradients' );
-        CssCrush_PostAliasFix::add( 'function', 'radial-repeating-gradient',
-            'csscrush__post_alias_fix_radialgradients' );
-    }
-
-    static public function add ( $alias_type, $key, $callback )
-    {
-        if ( $alias_type === 'function' ) {
-            // $key is the aliased css function name.
-            self::$functions[ $key ] = $callback;
+        if ($alias_type === 'function') {
+            self::$functions[$key] = $callback;
         }
     }
 
-    static public function remove ( $alias_type, $key )
+    public static function remove($alias_type, $key)
     {
-        if ( $type === 'function' ) {
-            // $key is the aliased css function name.
-            unset( self::$functions[ $key ] );
+        if ($alias_type === 'function') {
+            unset(self::$functions[$key]);
         }
     }
 }
 
-function csscrush__post_alias_fix_lineargradients ( $declaration_copies, $fn_name ) {
+/**
+ * Post alias fix callback for all gradients.
+ */
+function postalias_fix_gradients($declaration_copies) {
+    postalias_fix_linear_gradients($declaration_copies);
+    postalias_fix_radial_gradients($declaration_copies);
+}
 
-    // Swap the new 'to' gradient syntax to the old 'from' syntax for the prefixed versions.
-    // 1. Create new paren tokens based on the first prefixed declaration.
-    // 2. Replace the new syntax with the legacy syntax.
-    // 3. Swap in the new tokens on all the prefixed declarations.
+/**
+ * Convert the new angle syntax (keyword and degree) on -x-linear-gradient() functions
+ * to legacy equivalents.
+ */
+function postalias_fix_linear_gradients($declaration_copies) {
 
     static $angles_new, $angles_old;
-    if ( ! $angles_new ) {
+    if (! $angles_new) {
         $angles = array(
             'to top' => 'bottom',
             'to right' => 'left',
@@ -63,55 +58,73 @@ function csscrush__post_alias_fix_lineargradients ( $declaration_copies, $fn_nam
             'to bottom right' => 'top left',
             'to right bottom' => 'top left',
         );
-        $angles_new = array_keys( $angles );
-        $angles_old = array_values( $angles );
+        $angles_new = array_keys($angles);
+        $angles_old = array_values($angles);
     }
 
-    // 1, 2.
-    $patt = '~(?<![\w-])-[a-z]+-' . $fn_name . '(\?p\d+\?)~i';
+    static $deg_patt, $fn_patt;
+    if (! $deg_patt) {
+        $deg_patt = Regex::make('~(?<=[\( ])({{ number }})deg~i');
+        $fn_patt = Regex::make('~{{ LB }}{{ vendor }}(?:repeating-)?linear-gradient{{ parens }}~iS');
+    }
+
+    // Legacy angles move anti-clockwise and start from East, not North.
+    $deg_convert_callback = function ($m) {
+        $angle = floatval($m[1]);
+        $angle = ($angle + 90) - ($angle * 2);
+        return ($angle < 0 ? $angle + 360 : $angle) . 'deg';
+    };
+
+    // Create new paren tokens based on the first prefixed declaration.
+    // Replace the new syntax with the legacy syntax.
     $original_parens = array();
     $replacement_parens = array();
-    foreach ( CssCrush_Regex::matchAll( $patt, $declaration_copies[0]->value ) as $m ) {
-        $original_parens[] = $m[1][0];
-        $replacement_parens[] = CssCrush::$process->addToken(
-            str_ireplace(
-                $angles_new,
-                $angles_old,
-                CssCrush::$process->fetchToken( $m[1][0] )
-            ), 'p' );
+
+    foreach (Regex::matchAll($fn_patt, $declaration_copies[0]->value) as $m) {
+
+        $original_parens[] = $m['parens'][0];
+
+        // Keyword angle values.
+        $updated_paren_value = str_ireplace($angles_new, $angles_old, $m['parens'][0]);
+
+        // Degree angle values.
+        $replacement_parens[] = preg_replace_callback($deg_patt, $deg_convert_callback, $updated_paren_value);
     }
 
-    // 3.
-    foreach ( $declaration_copies as $prefixed_copy ) {
-        $prefixed_copy->value = str_replace( $original_parens, $replacement_parens, $prefixed_copy->value );
+    foreach ($declaration_copies as $prefixed_copy) {
+        $prefixed_copy->value = str_replace(
+            $original_parens,
+            $replacement_parens,
+            $prefixed_copy->value
+        );
     }
 }
 
-function csscrush__post_alias_fix_radialgradients ( $declaration_copies, $fn_name ) {
+/**
+ * Remove the 'at' keyword from -x-radial-gradient() for legacy implementations.
+ */
+function postalias_fix_radial_gradients($declaration_copies) {
 
-    // Remove the new 'at' keyword from gradient syntax for legacy implementations.
-    // 1. Create new paren tokens based on the first prefixed declaration.
-    // 2. Replace the new syntax with the legacy syntax.
-    // 3. Swap in the new tokens on all the prefixed declarations.
+    // Create new paren tokens based on the first prefixed declaration.
+    // Replace the new syntax with the legacy syntax.
+    static $fn_patt;
+    if (! $fn_patt) {
+        $fn_patt = Regex::make('~{{ LB }}{{ vendor }}(?:repeating-)?radial-gradient{{ parens }}~iS');
+    }
 
-    // 1, 2.
-    $patt = '~(?<![\w-])-[a-z]+-' . $fn_name . '(\?p\d+\?)~i';
     $original_parens = array();
     $replacement_parens = array();
-    foreach ( CssCrush_Regex::matchAll( $patt, $declaration_copies[0]->value ) as $m ) {
-        $original_parens[] = $m[1][0];
-        $replacement_parens[] = CssCrush::$process->addToken(
-            preg_replace(
-                '~\bat +(top|left|bottom|right|center)\b~i',
-                '$1',
-                CssCrush::$process->fetchToken( $m[1][0] )
-            ), 'p' );
+
+    foreach (Regex::matchAll($fn_patt, $declaration_copies[0]->value) as $m) {
+        $original_parens[] = $m['parens'][0];
+        $replacement_parens[] = preg_replace('~\bat +(top|left|bottom|right|center)\b~i', '$1', $m['parens'][0]);
     }
 
-    // 3.
-    foreach ( $declaration_copies as $prefixed_copy ) {
-        $prefixed_copy->value = str_replace( $original_parens, $replacement_parens, $prefixed_copy->value );
+    foreach ($declaration_copies as $prefixed_copy) {
+        $prefixed_copy->value = str_replace(
+            $original_parens,
+            $replacement_parens,
+            $prefixed_copy->value
+        );
     }
 }
-
-CssCrush_PostAliasFix::init();

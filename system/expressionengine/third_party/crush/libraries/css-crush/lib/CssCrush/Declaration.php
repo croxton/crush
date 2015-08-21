@@ -4,7 +4,9 @@
  * Declaration objects.
  *
  */
-class CssCrush_Declaration
+namespace CssCrush;
+
+class Declaration
 {
     public $property;
     public $canonicalProperty;
@@ -12,83 +14,53 @@ class CssCrush_Declaration
     public $functions;
     public $value;
     public $index;
-    public $skip;
-    public $important;
-    public $isValid = true;
+    public $skip = false;
+    public $important = false;
+    public $valid = true;
 
-    public function __construct ( $prop, $value, $contextIndex = 0 )
+    public function __construct($property, $value, $contextIndex = 0)
     {
-        $regex = CssCrush_Regex::$patt;
+        // Normalize the property name.
+        $property = strtolower($property);
 
-        // Normalize input. Lowercase the property name.
-        $prop = strtolower( trim( $prop ) );
-        $value = trim( $value );
-
-        // Check the input.
-        if ( $prop === '' || $value === '' || $value === null ) {
-            $this->isValid = false;
-
-            return;
-        }
-
-        // Test for escape tilde.
-        if ( $skip = strpos( $prop, '~' ) === 0 ) {
-            $prop = substr( $prop, 1 );
+        if ($this->skip = strpos($property, '~') === 0) {
+            $property = substr($property, 1);
         }
 
         // Store the canonical property name.
         // Store the vendor mark if one is present.
-        if ( preg_match( $regex->vendorPrefix, $prop, $vendor ) ) {
+        if (preg_match(Regex::$patt->vendorPrefix, $property, $vendor)) {
             $canonical_property = $vendor[2];
             $vendor = $vendor[1];
         }
         else {
             $vendor = null;
-            $canonical_property = $prop;
+            $canonical_property = $property;
         }
 
         // Check for !important.
-        if ( ( $important = stripos( $value, '!important' ) ) !== false ) {
-            $value = rtrim( substr( $value, 0, $important ) );
-            $important = true;
+        if (($important = stripos($value, '!important')) !== false) {
+            $value = rtrim(substr($value, 0, $important));
+            $this->important = true;
         }
 
-        // Ignore declarations with null css values.
-        if ( $value === false || $value === '' ) {
-            $this->isValid = false;
+        Crush::$process->hooks->run('declaration_preprocess', array('property' => &$property, 'value' => &$value));
 
-            return;
+        // Reject declarations with empty CSS values.
+        if ($value === false || $value === '') {
+            $this->valid = false;
         }
 
-        // Apply custom functions.
-        if ( ! $skip ) {
-            CssCrush_Function::executeOnString( $value );
-        }
-
-        // Capture all remaining paren pairs.
-        CssCrush::$process->captureParens( $value );
-
-        // Create an index of all regular functions in the value.
-        $functions = array();
-        if ( preg_match_all( $regex->function, $value, $m ) ) {
-            foreach ( $m[2] as $index => $fn_name ) {
-                $functions[ strtolower( $fn_name ) ] = true;
-            }
-        }
-
-        $this->property          = $prop;
+        $this->property = $property;
         $this->canonicalProperty = $canonical_property;
-        $this->vendor            = $vendor;
-        $this->functions         = $functions;
-        $this->index             = $contextIndex;
-        $this->value             = $value;
-        $this->skip              = $skip;
-        $this->important         = $important;
+        $this->vendor = $vendor;
+        $this->index = $contextIndex;
+        $this->value = $value;
     }
 
-    public function __toString ()
+    public function __toString()
     {
-        if ( CssCrush::$process->minifyOutput ) {
+        if (Crush::$process->minifyOutput) {
             $whitespace = '';
         }
         else {
@@ -99,8 +71,58 @@ class CssCrush_Declaration
         return "$this->property:$whitespace$this->value$important";
     }
 
-    public function getFullValue ()
+    /*
+        Execute functions on value.
+        Index functions.
+    */
+    public function process($parentRule)
     {
-        return CssCrush::$process->restoreTokens( $this->value, 'p' );
+        static $thisFunction;
+        if (! $thisFunction) {
+            $thisFunction = new Functions(array('this' => 'CssCrush\fn__this'));
+        }
+
+        if (! $this->skip) {
+
+            // this() function needs to be called exclusively because it is self referencing.
+            $context = (object) array(
+                'rule' => $parentRule
+            );
+            $this->value = $thisFunction->apply($this->value, $context);
+
+            if (isset($parentRule->declarations->data)) {
+                $parentRule->declarations->data += array($this->property => $this->value);
+            }
+
+            $context = (object) array(
+                'rule' => $parentRule,
+                'property' => $this->property
+            );
+            $this->value = Crush::$process->functions->apply($this->value, $context);
+        }
+
+        // Whitespace may have been introduced by functions.
+        $this->value = trim($this->value);
+
+        if ($this->value === '') {
+            $this->valid = false;
+            return;
+        }
+
+        $parentRule->declarations->queryData[$this->property] = $this->value;
+
+        $this->indexFunctions();
+    }
+
+    public function indexFunctions()
+    {
+        // Create an index of all regular functions in the value.
+        $functions = array();
+        if (preg_match_all(Regex::$patt->functionTest, $this->value, $m)) {
+            foreach ($m['func_name'] as $fn_name) {
+                $functions[strtolower($fn_name)] = true;
+            }
+        }
+        $this->functions = $functions;
     }
 }

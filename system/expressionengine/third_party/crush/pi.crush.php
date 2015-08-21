@@ -4,7 +4,7 @@ require_once PATH_THIRD . 'crush/libraries/css-crush/CssCrush.php';
 
 $plugin_info = array(
   'pi_name' => 'Crush',
-  'pi_version' =>'1.0.0',
+  'pi_version' =>'1.0.1',
   'pi_author' =>'Mark Croxton',
   'pi_author_url' => 'http://www.hallmark-design.co.uk/',
   'pi_description' => 'CSS Crush for ExpressionEngine',
@@ -63,7 +63,7 @@ class Crush {
 	 * @var        mixed 	true | false | filepath
 	 * @access     public  
 	 */
-	public $bolierplate = '';
+	public $boilerplate = '';
 
 	/* Append a timestamped querystring to output filename
 	 *
@@ -200,7 +200,7 @@ class Crush {
 	 */
 	public function file()
 	{
-		return csscrush::file(
+		return csscrush_file(
 			$this->filename, 
 			$this->get_params(FALSE, array('filename', 'attributes'))
 		);
@@ -222,7 +222,7 @@ class Crush {
 			attributes="media=print|title=monkey"
 		} 
 		*/
-		return csscrush::tag(
+		return csscrush_tag(
 			$this->filename, 
 			$this->get_params(FALSE, array('filename', 'attributes')),
 			$this->attributes
@@ -241,7 +241,7 @@ class Crush {
 		/* Example usage:
 		{exp:crush:tag filename="/_assets/css/style.css"} 
 		*/
-		return csscrush::inline(
+		return csscrush_inline(
 			$this->filename, 
 			$this->get_params(FALSE, array('filename', 'attributes')),
 			$this->attributes
@@ -256,35 +256,9 @@ class Crush {
 	 */
 	public function string()
 	{
-		return csscrush::string(
+		return csscrush_string(
 			$this->filename, 
 			$this->get_params(FALSE, array('filename', 'attributes'))
-		);
-	}
-
-	/** 
-	 * Add variables globally
-	 *
-	 * @access public
-	 * @return string
-	 */
-	public function global_vars()
-	{
-		return csscrush::globalVars(
-			$this->get_params('vars')
-		);
-	}
-
-	/** 
-	 * Clear config file and compiled files for the specified directory
-	 *
-	 * @access public
-	 * @return string
-	 */
-	public function clear_cache()
-	{
-		return csscrush::clearCache(
-			$this->get_params('dir')
 		);
 	}
 
@@ -296,7 +270,7 @@ class Crush {
 	 */
 	public function stat()
 	{
-		return csscrush::stat(
+		return csscrush_stat(
 			$this->get_params('stat_name')
 		);
 	}
@@ -346,7 +320,7 @@ class Crush {
 					$value = array_filter(array_map('trim', $value));
 
 					// associative arrays
-					if ( preg_match('/=/', $var) !== FALSE)
+					if ( preg_match('/=/', $var))
 					{
 						$param = array();
 
@@ -385,6 +359,7 @@ class Crush {
 				$this->$key = $value;
 			}
 		}
+
 	}
 
 	/** 
@@ -476,7 +451,7 @@ https://github.com/peteboere/css-crush/wiki/PHP-API#options
 ----------------------------------------------------------------------------
 Usage:
 
-This plugin supports all the CSS Crush methods as tags. Example:
+This plugin supports the main CSS Crush API functions as tags. Example:
 
 {exp:crush:tag 
 	filename="/_assets/css/style.css"
@@ -499,12 +474,6 @@ Process host CSS file and return CSS as text wrapped in html style tags
 
 {exp:crush:string}
 Compile a raw string of CSS string and return it
-
-{exp:crush:global_vars}
-Add variables globally
-
-{exp:crush:clear_cache}
-Clear config file and compiled files for the specified directory
 
 {exp:crush:stat}
 Retrieve statistics from the most recent compiled file. 
@@ -531,7 +500,7 @@ Only applies when minify option is set to false.
 newlines="use-platform | windows/win | unix"
 Set the output style of newlines.
 
-bolierplate="y|n|[filepath]"
+boilerplate="y|n|[filepath]"
 Prepend a boilerplate to the output file.
 use-platform | windows/win | unix
 

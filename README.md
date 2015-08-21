@@ -9,14 +9,22 @@
 
 This plugin is a wrapper for CSS Crush that allows you to use it in ExpressionEngine templates.
 
+## Requirements
+
+* ExpressionEngine 2.x
+* PHP 5.3 or later
+* The PHP function `parse_ini_file` is sometimes disabled by web hosts in the php.ini file. CSS Crush requires this function to be enabled.
+
+
 ## Installation
 
 1. Copy the crush folder to ./system/expressionengine/third_party/
-2. Open your webroot index.php file, find the "CUSTOM CONFIG VALUES" section and add the following lines:
+2. Create a folder 'cache' somewhere in your public webroot and make it writable by PHP
+3. Open your webroot index.php file, find the "CUSTOM CONFIG VALUES" section and add the following lines:
 
 ###
 	
-	$assign_to_config['crush_output_dir'] = '/path/to/cache'; // no trailing slash
+	$assign_to_config['crush_output_dir'] = '/path/to/cache'; //no trailing slash
 
 
 (if you're using a custom config bootstrap file, add the config items there instead)

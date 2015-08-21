@@ -16,9 +16,23 @@
         }
     ],
     "require": {
-        "php": ">=5.2.4"
+        "php": ">=5.3.3"
     },
+    "require-dev": {
+        "phpunit/phpunit": "4.1.*",
+        "psr/log": "1.0.*@dev",
+        "twig/twig": "1.*"
+    },
+    "bin": [
+        "bin/csscrush"
+    ],
     "autoload": {
-        "files": ["CssCrush.php"]
+        "psr-0": { "CssCrush": "lib/" },
+        "files": [ "lib/functions.php" ]
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "2.4.x-dev"
+        }
     }
 }

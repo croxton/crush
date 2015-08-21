@@ -4,88 +4,169 @@
  *  Options handling.
  *
  */
-class CssCrush_Options
-{
-    public $data = array();
+namespace CssCrush;
 
-    public function __construct ( $properties )
+class Options
+{
+    protected $computedOptions = array();
+    protected $inputOptions = array();
+
+    protected static $standardOptions = array(
+        'minify' => true,
+        'formatter' => null,
+        'versioning' => true,
+        'boilerplate' => true,
+        'vars' => array(),
+        'cache' => true,
+        'context' => null,
+        'output_file' => null,
+        'output_dir' => null,
+        'asset_dir' => null,
+        'doc_root' => null,
+        'vendor_target' => 'all',
+        'rewrite_import_urls' => true,
+        'plugins' => null,
+        'settings' => array(),
+        'stat_dump' => false,
+        'source_map' => false,
+        'newlines' => 'use-platform',
+    );
+
+    public function __construct(array $options = array(), Options $defaults = null)
     {
-        if ( $properties ) {
-            foreach ( $properties as $key => $value ) {
-                $this->__set( $key, $value );
+        $options = array_change_key_case($options, CASE_LOWER);
+
+        if ($defaults) {
+            $options += $defaults->get();
+        }
+
+        if (! empty($options['enable'])) {
+            if (empty($options['plugins'])) {
+                $options['plugins'] = $options['enable'];
             }
+            unset($options['enable']);
+        }
+
+        foreach ($options + self::$standardOptions as $name => $value) {
+            $this->__set($name, $value);
         }
     }
 
-    public function __set ( $name, $value )
+    public function __set($name, $value)
     {
-        switch ( $name ) {
+        $this->inputOptions[$name] = $value;
 
-            // For legacy debug option, check minify has not been set then
-            // flip the value and change property to minify.
+        switch ($name) {
+
+            // Legacy option.
             case 'debug':
-                if ( ! array_key_exists( 'minify', $this->data ) ) {
+                if (! array_key_exists('minify', $this->inputOptions)) {
                     $name = 'minify';
                     $value = ! $value;
                 }
                 break;
 
-            // If trace value is truthy set to stubs.
-            case 'trace':
-                if ( ! is_array( $value ) ) {
-                    $value = $value ? array( 'stubs' ) : array();
-                }
-                break;
-
-            // Resolve a formatter callback name and check it's callable.
             case 'formatter':
-                if ( isset( CssCrush::$config->formatters[ $value ] ) ) {
-                    $value = CssCrush::$config->formatters[ $value ];
+                if (is_string($value) && isset(Crush::$config->formatters[$value])) {
+                    $value = Crush::$config->formatters[$value];
                 }
-                if ( ! is_callable( $value ) ) {
+                if (! is_callable($value)) {
                     $value = null;
                 }
                 break;
 
-            // Sanitize path options.
-            case 'doc_root':
-                if ( is_string( $value ) ) {
-                    $value = CssCrush_Util::normalizePath( $value );
+            // Path options.
+            case 'boilerplate':
+                if (is_string($value)) {
+                    $value = Util::resolveUserPath($value);
                 }
                 break;
 
-            // Normalize options that can be passed as strings but internally
-            // are used as arrays.
-            case 'enable':
-            case 'disable':
+            case 'stat_dump':
+                if (is_string($value)) {
+                    $value = Util::resolveUserPath($value, function ($path) {
+                        touch($path);
+                        return $path;
+                    });
+                }
+                break;
+
+            case 'output_dir':
+            case 'asset_dir':
+                if (is_string($value)) {
+                    $value = Util::resolveUserPath($value, function ($path) use ($name) {
+                        if (! @mkdir($path, 0755, true)) {
+                            notice("Could not create directory $path (setting `$name` option).");
+                        }
+                        else {
+                            debug("Created directory $path (setting `$name` option).");
+                        }
+                        return $path;
+                    });
+                }
+                break;
+
+            // Path options that only accept system paths.
+            case 'context':
+            case 'doc_root':
+                if (is_string($value)) {
+                    $value = Util::normalizePath(realpath($value));
+                }
+                break;
+
+            // Options used internally as arrays.
+            case 'plugins':
                 $value = (array) $value;
                 break;
         }
 
-        $this->data[ $name ] = $value;
+        $this->computedOptions[$name] = $value;
     }
 
-    public function __get ( $name )
+    public function __get($name)
     {
-        return isset( $this->data[ $name ] ) ? $this->data[ $name ] : null;
-    }
+        switch ($name) {
+            case 'newlines':
+                switch ($this->inputOptions[$name]) {
+                    case 'windows':
+                    case 'win':
+                        return "\r\n";
+                    case 'unix':
+                        return "\n";
+                    case 'use-platform':
+                    default:
+                        return PHP_EOL;
+                }
+                break;
 
-    public function __isset ( $name )
-    {
-        return isset( $this->data[ $name ] );
-    }
+            case 'minify':
+                if (isset($this->computedOptions['formatter'])) {
+                    return false;
+                }
+                break;
 
-    public function merge ( CssCrush_Options $options_instance )
-    {
-        foreach ( $options_instance->data as $key => $value ) {
-            if ( ! array_key_exists( $key, $this->data ) ) {
-                $this->__set( $key, $value );
-            }
+            case 'formatter':
+                if (empty($this->inputOptions['minify'])) {
+                    return isset($this->computedOptions['formatter']) ?
+                        $this->computedOptions['formatter'] : 'CssCrush\fmtr_block';
+                }
         }
+
+        return isset($this->computedOptions[$name]) ? $this->computedOptions[$name] : null;
     }
 
-    public function get ()
+    public function __isset($name)
     {
-        return $this->data;
+        return isset($this->inputOptions[$name]);
+    }
+
+    public function get($computed = false)
+    {
+        return $computed ? $this->computedOptions : self::filter($this->inputOptions);
+    }
+
+    public static function filter(array $optionsArray = null)
+    {
+        return $optionsArray ? array_intersect_key($optionsArray, self::$standardOptions) : self::$standardOptions;
     }
 }

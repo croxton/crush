@@ -1,59 +1,101 @@
 <?php
 /**
- * 
+ *
  *  Plugin API
- * 
+ *
  */
-class CssCrush_Plugin
+namespace CssCrush;
+
+class Plugin
 {
-    static protected $plugins = array();
+    public static $plugins = array();
 
-    static public function show ()
+    public static function info()
     {
-        return self::$plugins;
-    }
+        $plugin_dirs = Crush::$config->pluginDirs;
+        $plugin_data = array();
 
-    static public function register ( $plugin_name, $callbacks )
-    {
-        self::$plugins[ $plugin_name ] = $callbacks;
-    }
+        foreach ($plugin_dirs as $plugin_dir) {
 
-    static public function load ( $plugin_name )
-    {
-        // Assume the the plugin file is not loaded if null.
-        if ( ! isset( self::$plugins[ $plugin_name ] ) ) {
-
-            $path = CssCrush::$config->location . "/plugins/$plugin_name.php";
-
-            if ( ! file_exists( $path ) ) {
-
-                trigger_error( __METHOD__ .
-                    ": <b>$plugin_name</b> plugin not found.\n", E_USER_NOTICE );
-            }
-            else {
-                require_once $path;
+            foreach (glob("$plugin_dir/*.php") as $path) {
+                $name = basename($path, '.php');
+                $plugin_data += array($name => Plugin::parseDoc($path));
             }
         }
-        return isset( self::$plugins[ $plugin_name ] ) ? self::$plugins[ $plugin_name ] : null;;
+
+        return $plugin_data;
     }
 
-    static public function enable ( $plugin_name )
+    public static function parseDoc($plugin_path)
     {
-        $plugin = self::load( $plugin_name );
+        $contents = file_get_contents($plugin_path);
+        if (preg_match('~/\*\*(.*?)\*/~s', $contents, $m)) {
 
-        if ( is_callable( $plugin[ 'enable' ] ) ) {
-            $plugin[ 'enable' ]();
+            $lines = preg_split(Regex::$patt->newline, $m[1]);
+            foreach ($lines as &$line) {
+                $line = trim(ltrim($line, "* \t"));
+            }
+            // Remove empty strings and reset indexes.
+            $lines = array_values(array_filter($lines, 'strlen'));
+
+            return $lines;
+        }
+
+        return false;
+    }
+
+    public static function register($plugin_name, $callbacks)
+    {
+        self::$plugins[$plugin_name] = $callbacks;
+    }
+
+    public static function load($plugin_name)
+    {
+        // Assume the the plugin file is not loaded if null.
+        if (! isset(self::$plugins[$plugin_name])) {
+
+            $found = false;
+
+            // Loop plugin_dirs to find the plugin.
+            foreach (Crush::$config->pluginDirs as $plugin_dir) {
+
+                $path = "$plugin_dir/$plugin_name.php";
+                if (file_exists($path)) {
+                    require_once $path;
+                    $found = true;
+                    break;
+                }
+            }
+
+            if (! $found) {
+                notice("Plugin '$plugin_name' not found.");
+            }
+            elseif (isset(self::$plugins[$plugin_name]['load'])) {
+                $plugin_load = self::$plugins[$plugin_name]['load'];
+                $plugin_load(Crush::$process);
+            }
+        }
+
+        return isset(self::$plugins[$plugin_name]) ? self::$plugins[$plugin_name] : null;
+    }
+
+    public static function enable($plugin_name)
+    {
+        $plugin = self::load($plugin_name);
+
+        if (is_callable($plugin['enable'])) {
+            $plugin['enable'](Crush::$process);
         }
 
         return true;
     }
 
-    static public function disable ( $plugin_name )
+    public static function disable($plugin_name)
     {
-        $plugin = isset( self::$plugins[ $plugin_name ] ) ? self::$plugins[ $plugin_name ] : null;
+        $plugin = isset(self::$plugins[$plugin_name]) ? self::$plugins[$plugin_name] : null;
 
-        if ( is_callable( $plugin[ 'disable' ] ) ) {
-            $plugin[ 'disable' ]();
+        if (isset($plugin['disable']) && is_callable($plugin['disable'])) {
+            $plugin['disable'](Crush::$process);
         }
     }
 }
