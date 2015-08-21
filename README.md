@@ -86,7 +86,7 @@ Only applies when minify option is set to false.
 ###`newlines="use-platform|windows/win|unix"`
 Set the output style of newlines.
 
-###`bolierplate="y|n|[filepath]"`
+###`boilerplate="y|n|[filepath]"`
 Prepend a boilerplate to the output file.
 
 ###`versioning="y|n"`
