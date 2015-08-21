@@ -3,7 +3,7 @@
 * Author: [Mark Croxton](http://hallmark-design.co.uk/)
 * Author of CSS Crush: [Pete Boere](https://github.com/peteboere)
 
-## Version 1.0.0
+## Version 1.0.1
 
 [CSS Crush](https://github.com/peteboere/css-crush) is an extensible PHP based CSS preprocessor that aims to alleviate many of the hacks and workarounds necessary in modern CSS development.
 
@@ -54,12 +54,6 @@ Process host CSS file and return CSS as text wrapped in html style tags
 
 ###{exp:crush:string}
 Compile a raw string of CSS string and return it
-
-###{exp:crush:global_vars}
-Add variables globally
-
-###{exp:crush:clear_cache}
-Clear config file and compiled files for the specified directory
 
 ###{exp:crush:stat}
 Retrieve statistics from the most recent compiled file. 
