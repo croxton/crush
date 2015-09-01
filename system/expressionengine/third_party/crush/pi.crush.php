@@ -430,7 +430,7 @@ class Crush {
     }
 
     // usage instructions
-	public function usage() 
+	static public function usage() 
 	{
   		ob_start();
 ?>
